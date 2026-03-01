@@ -49,70 +49,13 @@
 
   let socket = null;
   let currentRoomId = null;
+  var firebaseDb = null;
+  var firestoreUnsubscribe = null;
 
-  // ── Firebase ───────────────────────────────────────────
-  let db = null;
-  let firebaseRoomId = null;
-  let firestoreUnsubscribe = null;
-  let isSavingToFirebase = false;
-
-  function initFirebase(roomId) {
-    if (!window.OUR_WORLD_FIREBASE_CONFIG) return;
-    try {
-      if (!firebase.apps.length) {
-        firebase.initializeApp(window.OUR_WORLD_FIREBASE_CONFIG);
-      }
-      db = firebase.firestore();
-      firebaseRoomId = roomId;
-
-      // Listen for real-time updates
-      if (firestoreUnsubscribe) firestoreUnsubscribe();
-      firestoreUnsubscribe = db.collection('worlds').doc(roomId)
-        .onSnapshot(function (doc) {
-          if (doc.exists && !isSavingToFirebase) {
-            const data = doc.data();
-            if (data && data.state) {
-              setState(data.state);
-              try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
-              updateSyncStatus('Synced (Firebase) ✓', false);
-            }
-          }
-        }, function (err) {
-          updateSyncStatus('Firebase error', true);
-        });
-
-      updateSyncStatus('Synced (Firebase) ✓', false);
-    } catch (e) {
-      console.warn('Firebase init failed', e);
-    }
-  }
-
-  function saveToFirebase() {
-    if (!db || !firebaseRoomId) return;
-    isSavingToFirebase = true;
-    db.collection('worlds').doc(firebaseRoomId)
-      .set({ state: getState(), updatedAt: Date.now() })
-      .then(function () {
-        isSavingToFirebase = false;
-        updateSyncStatus('Synced (Firebase) ✓', false);
-      })
-      .catch(function (e) {
-        isSavingToFirebase = false;
-        updateSyncStatus('Sync error', true);
-      });
-  }
-
-  function updateSyncStatus(msg, isError) {
-    let el = document.getElementById('firebase-status');
-    if (!el) {
-      el = document.createElement('div');
-      el.id = 'firebase-status';
-      el.style.cssText = 'position:fixed;bottom:12px;left:12px;font-size:11px;padding:4px 10px;border-radius:20px;z-index:9999;pointer-events:none;font-family:sans-serif;';
-      document.body.appendChild(el);
-    }
-    el.textContent = msg;
-    el.style.background = isError ? '#ffeded' : '#e8f5e9';
-    el.style.color = isError ? '#c62828' : '#2e7d32';
+  function getFirebaseConfig() {
+    if (typeof window === 'undefined') return null;
+    var c = window.OUR_WORLD_FIREBASE_CONFIG;
+    return c && typeof c === 'object' && c.projectId ? c : null;
   }
 
   function getSocketUrl() {
@@ -195,6 +138,23 @@
     return JSON.parse(JSON.stringify(state));
   }
 
+  /** Firestore-safe copy (no undefined, NaN, Infinity). */
+  function getStateForFirestore() {
+    var raw = getState();
+    function clean(o) {
+      if (o === null || typeof o !== 'object') return o;
+      if (Array.isArray(o)) return o.map(clean);
+      var out = {};
+      for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) {
+        var v = o[k];
+        if (v === undefined || (typeof v === 'number' && (v !== v || !isFinite(v)))) continue;
+        out[k] = clean(v);
+      }
+      return out;
+    }
+    return clean(raw);
+  }
+
   function setState(payload) {
     if (!payload) return;
     state.panX = payload.panX != null ? payload.panX : state.panX;
@@ -215,11 +175,17 @@
     } catch (e) {
       console.warn('Storage full or unavailable', e);
     }
-    // Save to Firebase if connected
-    if (db && firebaseRoomId) {
-      saveToFirebase();
+    if (firebaseDb && currentRoomId && typeof firebase !== 'undefined' && firebase.firestore) {
+      var payload = { state: getStateForFirestore(), updatedAt: firebase.firestore.FieldValue.serverTimestamp() };
+      firebaseDb.collection('scrapbooks').doc(currentRoomId).set(payload, { merge: true })
+        .then(function () {
+          if (syncIndicator) { syncIndicator.title = 'Saved to cloud'; }
+        })
+        .catch(function (e) {
+          console.warn('Firebase save failed', e);
+          updateSyncIndicator('Sync write failed: ' + (e && e.message ? e.message : 'check Firestore rules'), 'error');
+        });
     }
-    // Also emit via socket if connected
     if (typeof io !== 'undefined' && socket && socket.connected) {
       socket.emit('state', getState());
     }
@@ -1275,6 +1241,110 @@
     if (collabStatus) collabStatus.classList.add('hidden');
   }
 
+  var syncIndicator = document.getElementById('sync-indicator');
+
+  function updateSyncIndicator(text, status) {
+    if (!syncIndicator) return;
+    syncIndicator.textContent = text || '';
+    syncIndicator.classList.remove('hidden', 'synced', 'error');
+    if (status === 'synced') syncIndicator.classList.add('synced');
+    if (status === 'error') syncIndicator.classList.add('error');
+    if (text) syncIndicator.classList.remove('hidden');
+    else syncIndicator.classList.add('hidden');
+  }
+
+  /** Use Firebase Firestore for sync (no server needed). Same password = same data on all devices. */
+  function initFirebaseSync(syncRoomId) {
+    var config = getFirebaseConfig();
+    if (!config || typeof firebase === 'undefined' || !firebase.firestore) {
+      updateSyncIndicator('Firebase not loaded (check config)', 'error');
+      return;
+    }
+    if (firestoreUnsubscribe) { firestoreUnsubscribe(); firestoreUnsubscribe = null; }
+    try {
+      if (!firebase.apps || !firebase.apps.length) firebase.initializeApp(config);
+      var db = firebase.firestore();
+      firebaseDb = db;
+      currentRoomId = syncRoomId;
+      updateSyncIndicator('Loading…', null);
+      var docRef = db.collection('scrapbooks').doc(syncRoomId);
+      docRef.get().then(function (snap) {
+        var data = snap.exists ? snap.data() : null;
+        if (data && data.state && typeof data.state === 'object') {
+          setState(data.state);
+          renderAll();
+          applyTransform();
+          try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+        }
+        updateSyncIndicator('Synced (Firebase)', 'synced');
+        if (!snap.exists || !data || !data.state) {
+          save();
+        }
+      }).catch(function (err) {
+        var msg = err && err.message ? err.message : String(err);
+        updateSyncIndicator('Sync error: ' + msg, 'error');
+        if (msg.indexOf('permission') !== -1 || msg.indexOf('Permission') !== -1) {
+          console.warn('Firestore: enable read/write in Firebase Console → Firestore → Rules (e.g. test mode or see firestore.rules.example)');
+        }
+      });
+      firestoreUnsubscribe = docRef.onSnapshot(function (snap) {
+        if (!snap.exists) return;
+        var data = snap.data();
+        if (data && data.state && typeof data.state === 'object') {
+          setState(data.state);
+          renderAll();
+          applyTransform();
+          try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+        }
+      }, function (err) {
+        console.warn('Firestore snapshot error', err);
+      });
+    } catch (e) {
+      updateSyncIndicator('Firebase error: ' + (e.message || 'check config'), 'error');
+    }
+  }
+
+  /** Connect to sync room so data is saved/loaded from server (same on all devices with same password). */
+  function connectSync(syncRoomId) {
+    const url = getSocketUrl();
+    if (!url || typeof io === 'undefined') {
+      updateSyncIndicator('Sync: open app from http://localhost:3001', 'error');
+      return;
+    }
+    if (socket) {
+      socket.disconnect();
+      socket.removeAllListeners();
+      socket = null;
+    }
+    updateSyncIndicator('Connecting…', null);
+    socket = io(url, { transports: ['websocket', 'polling'] });
+    currentRoomId = syncRoomId;
+    let receivedStateFromServer = false;
+
+    socket.on('connect', function () {
+      socket.emit('join', syncRoomId);
+      setTimeout(function () {
+        if (!receivedStateFromServer) socket.emit('state', getState());
+      }, 400);
+      updateSyncIndicator('Synced (saved across devices)', 'synced');
+    });
+
+    socket.on('state', function (payload) {
+      receivedStateFromServer = true;
+      setState(payload);
+      renderAll();
+      applyTransform();
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+    });
+
+    socket.on('disconnect', function () {
+      updateSyncIndicator('Sync disconnected. Reopen from http://localhost:3001', 'error');
+    });
+    socket.on('connect_error', function () {
+      updateSyncIndicator('To sync: run "npm run server" then open http://localhost:3001', 'error');
+    });
+  }
+
   function connectToRoom(roomId, isCreator) {
     const url = getSocketUrl();
     if (typeof io === 'undefined') {
@@ -1341,26 +1411,20 @@
       state.panY = rect.height / 2;
     }
     renderAll();
+    save();
 
-    // Connect to Firebase using password-derived room ID
-    if (syncRoomId && window.OUR_WORLD_FIREBASE_CONFIG) {
-      initFirebase(syncRoomId);
-      // Load from Firestore on first open
-      try {
-        if (!firebase.apps.length) firebase.initializeApp(window.OUR_WORLD_FIREBASE_CONFIG);
-        const tempDb = firebase.firestore();
-        tempDb.collection('worlds').doc(syncRoomId).get().then(function (doc) {
-          if (doc.exists && doc.data() && doc.data().state) {
-            setState(doc.data().state);
-            try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
-          } else {
-            // First time — push local state to Firebase
-            saveToFirebase();
-          }
-        }).catch(function () { saveToFirebase(); });
-      } catch (e) {}
-    } else {
-      save();
+    var sid = syncRoomId != null ? syncRoomId : (typeof localStorage !== 'undefined' ? localStorage.getItem(SYNC_ROOM_KEY) : null);
+    if (!sid && typeof localStorage !== 'undefined' && localStorage.getItem(UNLOCK_KEY) === '1') {
+      hashPassword(GATE_PASSWORD).then(function (id) {
+        try { localStorage.setItem(SYNC_ROOM_KEY, id); } catch (e) {}
+        if (getFirebaseConfig()) initFirebaseSync(id);
+        else if (getSocketUrl()) connectSync(id);
+        else updateSyncIndicator('To sync: add Firebase config or run "npm run server"', 'error');
+      });
+    } else if (sid) {
+      if (getFirebaseConfig()) initFirebaseSync(sid);
+      else if (getSocketUrl()) connectSync(sid);
+      else updateSyncIndicator('To sync: add Firebase config or run "npm run server"', 'error');
     }
 
     const params = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');

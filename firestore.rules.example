@@ -1,0 +1,13 @@
+// Copy to Firebase Console → Firestore → Rules (or deploy with Firebase CLI).
+// This allows read/write to scrapbooks collection. Tighten as needed (e.g. add auth).
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /scrapbooks/{roomId} {
+      allow read, write: if true;
+      // Optional: restrict to your app only (replace with your domain):
+      // allow read, write: if request.auth != null;
+    }
+  }
+}

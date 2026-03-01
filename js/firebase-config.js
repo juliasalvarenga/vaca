@@ -1,3 +1,4 @@
+// Firebase config for sync (from Firebase Console → Project settings → Your apps).
 window.OUR_WORLD_FIREBASE_CONFIG = {
   apiKey: "AIzaSyA8YYBvkRHxvWMix80ounB5PxGv7CKHwHs",
   authDomain: "corner-654bf.firebaseapp.com",
