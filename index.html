@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Our World</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;500;600;700&family=Patrick+Hand&family=Shadows+Into+Light&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="viewport">
+    <div id="canvas"></div>
+  </div>
+
+  <div id="toolbar">
+    <button class="tool-btn" data-type="photo" title="Add Photo">
+      <span class="tool-icon">📸</span>
+      <span class="tool-label">Photo</span>
+    </button>
+    <button class="tool-btn" data-type="sticky" title="Add Sticky Note">
+      <span class="tool-icon">📝</span>
+      <span class="tool-label">Note</span>
+    </button>
+    <button class="tool-btn" data-type="date" title="Add Date Log">
+      <span class="tool-icon">📅</span>
+      <span class="tool-label">Date</span>
+    </button>
+    <button class="tool-btn" data-type="spot" title="Add Favorite Spot">
+      <span class="tool-icon">📍</span>
+      <span class="tool-label">Spot</span>
+    </button>
+    <button class="tool-btn" data-type="food" title="Add Favorite Food">
+      <span class="tool-icon">🍽️</span>
+      <span class="tool-label">Food</span>
+    </button>
+    <button class="tool-btn" data-type="letter" title="Add Love Letter">
+      <span class="tool-icon">💌</span>
+      <span class="tool-label">Letter</span>
+    </button>
+    <button class="tool-btn" data-type="memory" title="Add Memory">
+      <span class="tool-icon">✨</span>
+      <span class="tool-label">Memory</span>
+    </button>
+    <button class="tool-btn" data-type="bucketlist" title="Bucket List">
+      <span class="tool-icon">☑️</span>
+      <span class="tool-label">Bucket</span>
+    </button>
+    <button class="tool-btn" data-type="quote" title="Quote / Inside Joke">
+      <span class="tool-icon">💬</span>
+      <span class="tool-label">Quote</span>
+    </button>
+    <div class="tool-separator"></div>
+    <button class="tool-btn utility" id="btn-collab" title="Collaborate">
+      <span class="tool-icon">👥</span>
+      <span class="tool-label">Together</span>
+    </button>
+    <div class="tool-separator"></div>
+    <button class="tool-btn utility" id="btn-reset" title="Reset View">
+      <span class="tool-icon">🏠</span>
+      <span class="tool-label">Reset</span>
+    </button>
+    <button class="tool-btn utility" id="btn-fit" title="Fit All Items">
+      <span class="tool-icon">🔎</span>
+      <span class="tool-label">Fit All</span>
+    </button>
+  </div>
+
+  <div id="zoom-indicator">100%</div>
+
+  <div id="modal-overlay" class="hidden">
+    <div id="modal">
+      <div class="modal-header">
+        <h2 id="modal-title"></h2>
+        <button id="modal-close">&times;</button>
+      </div>
+      <div id="modal-body"></div>
+      <div class="modal-footer">
+        <button id="modal-cancel" class="btn btn-cancel">Cancel</button>
+        <button id="modal-save" class="btn btn-save">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="confirm-overlay" class="hidden">
+    <div id="confirm-dialog">
+      <p>Delete this item?</p>
+      <div class="confirm-buttons">
+        <button id="confirm-no" class="btn btn-cancel">No</button>
+        <button id="confirm-yes" class="btn btn-save">Yes</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="collab-panel" class="hidden">
+    <div class="collab-content">
+      <h3>👥 Edit together</h3>
+      <p class="collab-hint">Share the same room code to see changes in real time.</p>
+      <div class="form-group">
+        <label>Room code</label>
+        <input type="text" id="collab-room-input" placeholder="e.g. ABC123" maxlength="12">
+      </div>
+      <div class="collab-actions">
+        <button id="collab-join" class="btn btn-save">Join room</button>
+        <button id="collab-create" class="btn btn-cancel">Create new room</button>
+      </div>
+      <div id="collab-status" class="collab-status hidden"></div>
+      <button id="collab-close" class="collab-close">&times;</button>
+    </div>
+  </div>
+
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
