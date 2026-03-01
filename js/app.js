@@ -42,13 +42,78 @@
   let startItemX = 0, startItemY = 0;
   let hasMoved = false;
 
-  let currentModalMode = null; // 'create' | 'edit'
+  let currentModalMode = null;
   let currentModalType = null;
   let editingItemId = null;
   let pendingDeleteId = null;
 
   let socket = null;
   let currentRoomId = null;
+
+  // ── Firebase ───────────────────────────────────────────
+  let db = null;
+  let firebaseRoomId = null;
+  let firestoreUnsubscribe = null;
+  let isSavingToFirebase = false;
+
+  function initFirebase(roomId) {
+    if (!window.OUR_WORLD_FIREBASE_CONFIG) return;
+    try {
+      if (!firebase.apps.length) {
+        firebase.initializeApp(window.OUR_WORLD_FIREBASE_CONFIG);
+      }
+      db = firebase.firestore();
+      firebaseRoomId = roomId;
+
+      // Listen for real-time updates
+      if (firestoreUnsubscribe) firestoreUnsubscribe();
+      firestoreUnsubscribe = db.collection('worlds').doc(roomId)
+        .onSnapshot(function (doc) {
+          if (doc.exists && !isSavingToFirebase) {
+            const data = doc.data();
+            if (data && data.state) {
+              setState(data.state);
+              try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+              updateSyncStatus('Synced (Firebase) ✓', false);
+            }
+          }
+        }, function (err) {
+          updateSyncStatus('Firebase error', true);
+        });
+
+      updateSyncStatus('Synced (Firebase) ✓', false);
+    } catch (e) {
+      console.warn('Firebase init failed', e);
+    }
+  }
+
+  function saveToFirebase() {
+    if (!db || !firebaseRoomId) return;
+    isSavingToFirebase = true;
+    db.collection('worlds').doc(firebaseRoomId)
+      .set({ state: getState(), updatedAt: Date.now() })
+      .then(function () {
+        isSavingToFirebase = false;
+        updateSyncStatus('Synced (Firebase) ✓', false);
+      })
+      .catch(function (e) {
+        isSavingToFirebase = false;
+        updateSyncStatus('Sync error', true);
+      });
+  }
+
+  function updateSyncStatus(msg, isError) {
+    let el = document.getElementById('firebase-status');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'firebase-status';
+      el.style.cssText = 'position:fixed;bottom:12px;left:12px;font-size:11px;padding:4px 10px;border-radius:20px;z-index:9999;pointer-events:none;font-family:sans-serif;';
+      document.body.appendChild(el);
+    }
+    el.textContent = msg;
+    el.style.background = isError ? '#ffeded' : '#e8f5e9';
+    el.style.color = isError ? '#c62828' : '#2e7d32';
+  }
 
   function getSocketUrl() {
     if (typeof window === 'undefined') return '';
@@ -58,7 +123,6 @@
     return 'http://localhost:3001';
   }
 
-  /** Derive a stable sync room id from password (same password = same data on all devices). */
   function hashPassword(password) {
     return new Promise(function (resolve, reject) {
       if (typeof crypto === 'undefined' || !crypto.subtle) {
@@ -126,7 +190,7 @@
     zoomIndicator.textContent = Math.round(state.zoom * 100) + '%';
   }
 
-  // ── Storage & state for sync ────────────────────────────
+  // ── Storage & state ────────────────────────────────────
   function getState() {
     return JSON.parse(JSON.stringify(state));
   }
@@ -151,6 +215,11 @@
     } catch (e) {
       console.warn('Storage full or unavailable', e);
     }
+    // Save to Firebase if connected
+    if (db && firebaseRoomId) {
+      saveToFirebase();
+    }
+    // Also emit via socket if connected
     if (typeof io !== 'undefined' && socket && socket.connected) {
       socket.emit('state', getState());
     }
@@ -668,9 +737,7 @@
     const btn = e.target.closest('.tool-btn');
     if (!btn) return;
     const type = btn.dataset.type;
-    if (type) {
-      openCreateModal(type);
-    }
+    if (type) openCreateModal(type);
   });
 
   // ── Bucket list in-card toggle ─────────────────────────
@@ -966,7 +1033,6 @@
 
   // ── Form Interactions ──────────────────────────────────
   function setupFormInteractions(type) {
-    // Photo preview
     if (type === 'photo') {
       const fileInput = document.getElementById('f-photo-file');
       const preview = document.getElementById('f-photo-preview');
@@ -983,7 +1049,6 @@
       }
     }
 
-    // Color swatches
     const colorRow = document.getElementById('f-sticky-colors');
     if (colorRow) {
       colorRow.addEventListener('click', (e) => {
@@ -994,7 +1059,6 @@
       });
     }
 
-    // Icon pickers
     ['f-date-emoji', 'f-spot-emoji', 'f-food-emoji'].forEach((id) => {
       const row = document.getElementById(id);
       if (row) {
@@ -1007,7 +1071,6 @@
       }
     });
 
-    // Rating hearts (icons)
     const ratingRow = document.getElementById('f-food-rating');
     if (ratingRow) {
       ratingRow.addEventListener('click', (e) => {
@@ -1024,7 +1087,6 @@
       });
     }
 
-    // Bucket list: add / remove rows
     const bucketAdd = document.getElementById('f-bucket-add');
     const bucketRows = document.getElementById('f-bucket-rows');
     if (bucketAdd && bucketRows) {
@@ -1092,19 +1154,13 @@
           : null;
         const imageData = stored || (existing && existing.imageData) || '';
         if (!imageData) { alert('Please select a photo'); return null; }
-        return {
-          imageData,
-          caption: document.getElementById('f-photo-caption').value.trim(),
-        };
+        return { imageData, caption: document.getElementById('f-photo-caption').value.trim() };
       }
       case 'sticky': {
         const text = document.getElementById('f-sticky-text').value.trim();
         if (!text) { alert('Please write something'); return null; }
         const selSwatch = document.querySelector('#f-sticky-colors .color-swatch.selected');
-        return {
-          text,
-          colorClass: selSwatch ? selSwatch.dataset.cls : 'sticky-mustard',
-        };
+        return { text, colorClass: selSwatch ? selSwatch.dataset.cls : 'sticky-mustard' };
       }
       case 'date': {
         const title = document.getElementById('f-date-title').value.trim();
@@ -1138,27 +1194,17 @@
           const icon = b.querySelector('.rating-heart-icon');
           if (icon && icon.classList.contains('filled')) rating = parseInt(b.dataset.val);
         });
-        return {
-          name,
-          notes: document.getElementById('f-food-notes').value.trim(),
-          rating,
-          emoji: selIcon ? selIcon.dataset.emoji : 'utensils-crossed',
-        };
+        return { name, notes: document.getElementById('f-food-notes').value.trim(), rating, emoji: selIcon ? selIcon.dataset.emoji : 'utensils-crossed' };
       }
       case 'letter': {
-        const title = document.getElementById('f-letter-title').value.trim();
         const content = document.getElementById('f-letter-content').value.trim();
         if (!content) { alert('Please write your letter'); return null; }
-        return { title: title || 'Untitled', content };
+        return { title: document.getElementById('f-letter-title').value.trim() || 'Untitled', content };
       }
       case 'memory': {
         const title = document.getElementById('f-memory-title').value.trim();
         if (!title) { alert('Please add a title'); return null; }
-        return {
-          title,
-          date: document.getElementById('f-memory-date').value,
-          description: document.getElementById('f-memory-desc').value.trim(),
-        };
+        return { title, date: document.getElementById('f-memory-date').value, description: document.getElementById('f-memory-desc').value.trim() };
       }
       case 'bucketlist': {
         const title = document.getElementById('f-bucket-title').value.trim();
@@ -1168,11 +1214,7 @@
         rows.forEach((row) => {
           const text = row.querySelector('.f-bucket-text').value.trim();
           const checked = row.querySelector('.f-bucket-check').checked;
-          items.push({
-            id: row.dataset.entryId || uid(),
-            text: text || 'Unnamed item',
-            checked,
-          });
+          items.push({ id: row.dataset.entryId || uid(), text: text || 'Unnamed item', checked });
         });
         if (items.length === 0) { alert('Add at least one item'); return null; }
         return { title, items };
@@ -1180,10 +1222,7 @@
       case 'quote': {
         const quote = document.getElementById('f-quote-text').value.trim();
         if (!quote) { alert('Please write a quote'); return null; }
-        return {
-          quote,
-          attribution: document.getElementById('f-quote-attribution').value.trim(),
-        };
+        return { quote, attribution: document.getElementById('f-quote-attribution').value.trim() };
       }
       default: return null;
     }
@@ -1204,45 +1243,20 @@
   // ── Welcome Items ──────────────────────────────────────
   function addWelcomeItems() {
     state.items.push({
-      id: uid(),
-      type: 'sticky',
-      x: -90,
-      y: -120,
-      rotation: -2.5,
-      zIndex: state.nextZ++,
-      data: {
-        text: 'Welcome to Our World! ♥\n\nDrag me around, add photos, notes, and memories. This is your space!',
-        colorClass: 'sticky-rose',
-      },
+      id: uid(), type: 'sticky', x: -90, y: -120, rotation: -2.5, zIndex: state.nextZ++,
+      data: { text: 'Welcome to Our World! ♥\n\nDrag me around, add photos, notes, and memories. This is your space!', colorClass: 'sticky-rose' },
     });
     state.items.push({
-      id: uid(),
-      type: 'memory',
-      x: 150,
-      y: -80,
-      rotation: 1.8,
-      zIndex: state.nextZ++,
-      data: {
-        title: 'The Beginning',
-        date: '',
-        description: 'Every love story is beautiful, but ours is my favorite.',
-      },
+      id: uid(), type: 'memory', x: 150, y: -80, rotation: 1.8, zIndex: state.nextZ++,
+      data: { title: 'The Beginning', date: '', description: 'Every love story is beautiful, but ours is my favorite.' },
     });
     state.items.push({
-      id: uid(),
-      type: 'letter',
-      x: -140,
-      y: 120,
-      rotation: 0.7,
-      zIndex: state.nextZ++,
-      data: {
-        title: 'To Us',
-        content: 'This little corner of the internet is just for us. Fill it with everything that makes our world special.',
-      },
+      id: uid(), type: 'letter', x: -140, y: 120, rotation: 0.7, zIndex: state.nextZ++,
+      data: { title: 'To Us', content: 'This little corner of the internet is just for us. Fill it with everything that makes our world special.' },
     });
   }
 
-  // ── Collaborate (real-time sync) ────────────────────────
+  // ── Collaborate (Socket.io fallback) ───────────────────
   const collabPanel = document.getElementById('collab-panel');
   const collabRoomInput = document.getElementById('collab-room-input');
   const collabJoinBtn = document.getElementById('collab-join');
@@ -1261,73 +1275,28 @@
     if (collabStatus) collabStatus.classList.add('hidden');
   }
 
-  /** Connect to sync room so data is saved/loaded from server (same on all devices with same password). */
-  function connectSync(syncRoomId) {
-    const url = getSocketUrl();
-    if (!url || typeof io === 'undefined') return;
-    if (socket) {
-      socket.disconnect();
-      socket.removeAllListeners();
-      socket = null;
-    }
-    socket = io(url, { transports: ['websocket', 'polling'] });
-    currentRoomId = syncRoomId;
-    let receivedStateFromServer = false;
-
-    socket.on('connect', function () {
-      socket.emit('join', syncRoomId);
-      setTimeout(function () {
-        if (!receivedStateFromServer) socket.emit('state', getState());
-      }, 400);
-    });
-
-    socket.on('state', function (payload) {
-      receivedStateFromServer = true;
-      setState(payload);
-      renderAll();
-      applyTransform();
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
-    });
-
-    socket.on('disconnect', function () {});
-    socket.on('connect_error', function () {});
-  }
-
   function connectToRoom(roomId, isCreator) {
     const url = getSocketUrl();
     if (typeof io === 'undefined') {
-      showCollabStatus('Socket.io not loaded. Open the app from http://localhost:3001 (run: npm run server)', true);
+      showCollabStatus('Socket.io not loaded.', true);
       return;
     }
-    if (socket) {
-      socket.disconnect();
-      socket.removeAllListeners();
-      socket = null;
-    }
+    if (socket) { socket.disconnect(); socket.removeAllListeners(); socket = null; }
     socket = io(url, { transports: ['websocket', 'polling'] });
     currentRoomId = roomId;
 
     socket.on('connect', function () {
       socket.emit('join', roomId);
-      if (isCreator) {
-        socket.emit('state', getState());
-      }
+      if (isCreator) socket.emit('state', getState());
       showCollabStatus('Connected! Share the room code: ' + roomId);
     });
-
     socket.on('state', function (payload) {
       setState(payload);
       renderAll();
       applyTransform();
     });
-
-    socket.on('disconnect', function () {
-      showCollabStatus('Disconnected.', true);
-    });
-
-    socket.on('connect_error', function () {
-      showCollabStatus('Could not connect. Is the server running? (npm run server)', true);
-    });
+    socket.on('disconnect', function () { showCollabStatus('Disconnected.', true); });
+    socket.on('connect_error', function () { showCollabStatus('Could not connect. Is the server running?', true); });
   }
 
   function randomRoomCode() {
@@ -1343,20 +1312,12 @@
     refreshIcons();
   });
 
-  collabCloseBtn.addEventListener('click', () => {
-    collabPanel.classList.add('hidden');
-  });
-
-  collabPanel.addEventListener('click', (e) => {
-    if (e.target === collabPanel) collabPanel.classList.add('hidden');
-  });
+  collabCloseBtn.addEventListener('click', () => { collabPanel.classList.add('hidden'); });
+  collabPanel.addEventListener('click', (e) => { if (e.target === collabPanel) collabPanel.classList.add('hidden'); });
 
   collabJoinBtn.addEventListener('click', () => {
     const room = (collabRoomInput.value || '').trim().toUpperCase().slice(0, 12);
-    if (!room) {
-      showCollabStatus('Enter a room code', true);
-      return;
-    }
+    if (!room) { showCollabStatus('Enter a room code', true); return; }
     connectToRoom(room, false);
   });
 
@@ -1371,7 +1332,7 @@
   });
 
   // ── Init ───────────────────────────────────────────────
-  function init() {
+  function init(syncRoomId) {
     load();
     if (state.items.length === 0) {
       addWelcomeItems();
@@ -1380,10 +1341,27 @@
       state.panY = rect.height / 2;
     }
     renderAll();
-    save();
 
-    var syncRoomId = typeof localStorage !== 'undefined' ? localStorage.getItem(SYNC_ROOM_KEY) : null;
-    if (syncRoomId && getSocketUrl()) connectSync(syncRoomId);
+    // Connect to Firebase using password-derived room ID
+    if (syncRoomId && window.OUR_WORLD_FIREBASE_CONFIG) {
+      initFirebase(syncRoomId);
+      // Load from Firestore on first open
+      try {
+        if (!firebase.apps.length) firebase.initializeApp(window.OUR_WORLD_FIREBASE_CONFIG);
+        const tempDb = firebase.firestore();
+        tempDb.collection('worlds').doc(syncRoomId).get().then(function (doc) {
+          if (doc.exists && doc.data() && doc.data().state) {
+            setState(doc.data().state);
+            try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+          } else {
+            // First time — push local state to Firebase
+            saveToFirebase();
+          }
+        }).catch(function () { saveToFirebase(); });
+      } catch (e) {}
+    } else {
+      save();
+    }
 
     const params = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
     const roomFromUrl = params.get('room');
@@ -1395,7 +1373,8 @@
   }
 
   if (typeof localStorage !== 'undefined' && localStorage.getItem(UNLOCK_KEY) === '1') {
-    init();
+    const syncRoomId = localStorage.getItem(SYNC_ROOM_KEY);
+    init(syncRoomId);
   } else {
     document.body.classList.add('locked');
     var form = document.getElementById('password-form');
@@ -1410,13 +1389,10 @@
             localStorage.setItem(UNLOCK_KEY, '1');
             document.body.classList.remove('locked');
             if (err) { err.textContent = ''; err.classList.add('hidden'); }
-            init();
+            init(syncRoomId);
           });
         } else {
-          if (err) {
-            err.textContent = 'Incorrect';
-            err.classList.remove('hidden');
-          }
+          if (err) { err.textContent = 'Incorrect'; err.classList.remove('hidden'); }
           input.value = '';
           input.focus();
         }
@@ -1424,3 +1400,4 @@
     }
   }
 })();
+
