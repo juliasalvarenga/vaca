@@ -3,6 +3,8 @@
 
   // ── State ──────────────────────────────────────────────
   const STORAGE_KEY = 'our-world-scrapbook';
+  const UNLOCK_KEY = 'ourworld_unlocked';
+  const GATE_PASSWORD = 'devotion';
 
   let state = {
     panX: 0,
@@ -63,9 +65,9 @@
     { id: 'lavender', bg: '#c5b3d1', cls: 'sticky-lavender' },
     { id: 'peach', bg: '#f0c8a8', cls: 'sticky-peach' },
   ];
-  const DATE_EMOJIS = ['💕', '🥰', '🌸', '🎉', '🍷', '☀️', '🌙', '🎶', '🎬', '🏖️'];
-  const FOOD_EMOJIS = ['🍕', '🍣', '🍜', '🍔', '🌮', '🍰', '🍝', '🥗', '🍱', '☕', '🧋', '🍦'];
-  const SPOT_EMOJIS = ['📍', '🏠', '☕', '🏖️', '🌳', '🎢', '🏔️', '🌆', '🛍️', '🎭'];
+  const DATE_ICONS = ['heart', 'smile', 'flower-2', 'party-popper', 'wine', 'sun', 'moon', 'music', 'clapperboard', 'palmtree'];
+  const FOOD_ICONS = ['utensils-crossed', 'cookie', 'croissant', 'pizza', 'salad', 'cake-slice', 'coffee', 'ice-cream', 'milk', 'cherry'];
+  const SPOT_ICONS = ['map-pin', 'home', 'coffee', 'palmtree', 'trees', 'mountain', 'building-2', 'shopping-bag', 'theater', 'landmark'];
 
   // ── Helpers ────────────────────────────────────────────
   function uid() {
@@ -78,6 +80,12 @@
 
   function pick(arr) {
     return arr[Math.floor(Math.random() * arr.length)];
+  }
+
+  function refreshIcons() {
+    if (typeof window !== 'undefined' && window.lucide && typeof window.lucide.createIcons === 'function') {
+      window.lucide.createIcons();
+    }
   }
 
   function clamp(val, min, max) {
@@ -159,6 +167,7 @@
     canvas.innerHTML = '';
     state.items.forEach((item) => renderItem(item));
     applyTransform();
+    refreshIcons();
   }
 
   function renderItem(item) {
@@ -222,6 +231,7 @@
     }
 
     canvas.appendChild(el);
+    refreshIcons();
 
     requestAnimationFrame(() => {
       el.addEventListener('animationend', () => el.classList.remove('pop-in'), { once: true });
@@ -269,6 +279,7 @@
       dayNum = dateObj.getDate();
       monthStr = dateObj.toLocaleString('en', { month: 'short' }).toUpperCase();
     }
+    const moodIcon = DATE_ICONS.includes(d.emoji) ? d.emoji : 'heart';
     return `
       <div class="date-sidebar">
         ${dateStr
@@ -276,38 +287,43 @@
               <span class="date-day">${dayNum}</span>
               <span class="date-month">${monthStr}</span>
             </div>`
-          : `<div class="date-circle"><span class="date-emoji-lg">${d.emoji || '💕'}</span></div>`}
+          : `<div class="date-circle"><span class="date-icon-wrap"><i data-lucide="${moodIcon}" class="date-icon-lg"></i></span></div>`}
       </div>
       <div class="date-main">
         <div class="date-title">${esc(d.title)}</div>
         <div class="date-desc">${esc(d.description)}</div>
-        <div class="date-mood">${d.emoji || '💕'}</div>
+        <div class="date-mood"><i data-lucide="${moodIcon}" class="date-mood-icon"></i></div>
       </div>`;
   }
 
   function renderSpot(item) {
     const d = item.data;
+    const spotIcon = SPOT_ICONS.includes(d.emoji) ? d.emoji : 'map-pin';
     return `
       <div class="postcard-stripe"></div>
       <div class="spot-body">
-        <div class="spot-icon">${d.emoji || '📍'}</div>
+        <div class="spot-icon"><i data-lucide="${spotIcon}" class="spot-icon-svg"></i></div>
         <div class="spot-name">${esc(d.name)}</div>
         ${d.address ? `<div class="spot-address">${esc(d.address)}</div>` : ''}
         ${d.notes ? `<div class="spot-notes">${esc(d.notes)}</div>` : ''}
       </div>
-      <div class="spot-stamp">${d.emoji || '📍'}</div>
+      <div class="spot-stamp"><i data-lucide="${spotIcon}" class="spot-stamp-icon"></i></div>
       <div class="postcard-stripe"></div>`;
   }
 
   function renderFood(item) {
     const d = item.data;
-    const hearts = '♥'.repeat(d.rating || 0) + '♡'.repeat(5 - (d.rating || 0));
+    const rating = d.rating || 0;
+    const foodIcon = FOOD_ICONS.includes(d.emoji) ? d.emoji : 'utensils-crossed';
+    const heartsHtml = [1, 2, 3, 4, 5].map(function (n) {
+      return '<i data-lucide="heart" class="food-heart ' + (n <= rating ? 'filled' : 'muted') + '"></i>';
+    }).join('');
     return `
       <div class="recipe-tab">FAVORITE</div>
-      <div class="food-emoji-bar">${d.emoji || '🍽️'}</div>
+      <div class="food-icon-bar"><i data-lucide="${foodIcon}" class="food-icon-svg"></i></div>
       <div class="food-body">
         <div class="food-name">${esc(d.name)}</div>
-        <div class="food-rating">${hearts}</div>
+        <div class="food-rating">${heartsHtml}</div>
         ${d.notes ? `<div class="food-notes">${esc(d.notes)}</div>` : ''}
       </div>`;
   }
@@ -315,7 +331,7 @@
   function renderLetter(item) {
     const d = item.data;
     return `
-      <div class="letter-seal">♥</div>
+      <div class="letter-seal"><i data-lucide="heart" class="letter-seal-icon"></i></div>
       <div class="letter-header">
         <span class="letter-title">${esc(d.title)}</span>
       </div>
@@ -637,14 +653,6 @@
     }
   });
 
-  document.getElementById('btn-reset').addEventListener('click', () => {
-    state.panX = 0;
-    state.panY = 0;
-    state.zoom = 1;
-    applyTransform();
-    debouncedSave();
-  });
-
   // ── Bucket list in-card toggle ─────────────────────────
   canvas.addEventListener('click', (e) => {
     const bucketItem = e.target.closest('.bucket-item');
@@ -700,24 +708,26 @@
 
   function showModal(type, data) {
     const titles = {
-      photo: '📸 Add a Photo',
-      sticky: '📝 Sticky Note',
-      date: '📅 Date Log',
-      spot: '📍 Favorite Spot',
-      food: '🍽️ Favorite Food',
-      letter: '💌 Love Letter',
-      memory: '✨ Memory',
-      bucketlist: '☑️ Bucket List',
-      quote: '💬 Quote / Inside Joke',
+      photo: { icon: 'camera', text: 'Add Photo' },
+      sticky: { icon: 'sticky-note', text: 'Sticky Note' },
+      date: { icon: 'calendar-days', text: 'Date Log' },
+      spot: { icon: 'map-pin', text: 'Favorite Spot' },
+      food: { icon: 'utensils-crossed', text: 'Favorite Food' },
+      letter: { icon: 'heart', text: 'Love Letter' },
+      memory: { icon: 'sparkles', text: 'Memory' },
+      bucketlist: { icon: 'list-checks', text: 'Bucket List' },
+      quote: { icon: 'message-circle', text: 'Quote' },
     };
+    const t = titles[type] || { icon: 'circle', text: type };
     if (currentModalMode === 'edit') {
-      modalTitle.textContent = '✏️ Edit ' + type.charAt(0).toUpperCase() + type.slice(1);
+      modalTitle.innerHTML = '<i data-lucide="pencil" class="modal-title-icon"></i> Edit ' + type.charAt(0).toUpperCase() + type.slice(1);
     } else {
-      modalTitle.textContent = titles[type] || type;
+      modalTitle.innerHTML = '<i data-lucide="' + t.icon + '" class="modal-title-icon"></i> ' + t.text;
     }
     modalBody.innerHTML = buildForm(type, data);
     modalOverlay.classList.remove('hidden');
     setupFormInteractions(type);
+    refreshIcons();
     const firstInput = modalBody.querySelector('input:not([type="file"]), textarea');
     if (firstInput) setTimeout(() => firstInput.focus(), 100);
   }
@@ -801,7 +811,7 @@
   }
 
   function formDate(d) {
-    const selEmoji = d.emoji || '💕';
+    const sel = DATE_ICONS.includes(d.emoji) ? d.emoji : 'heart';
     return `
       <div class="form-group">
         <label>Date</label>
@@ -817,14 +827,14 @@
       </div>
       <div class="form-group">
         <label>Mood</label>
-        <div class="emoji-picker-row" id="f-date-emoji">
-          ${DATE_EMOJIS.map((e) => `<button type="button" class="emoji-option ${e === selEmoji ? 'selected' : ''}" data-emoji="${e}">${e}</button>`).join('')}
+        <div class="icon-picker-row" id="f-date-emoji">
+          ${DATE_ICONS.map((icon) => `<button type="button" class="icon-option ${icon === sel ? 'selected' : ''}" data-emoji="${icon}"><i data-lucide="${icon}" class="picker-icon"></i></button>`).join('')}
         </div>
       </div>`;
   }
 
   function formSpot(d) {
-    const selEmoji = d.emoji || '📍';
+    const sel = SPOT_ICONS.includes(d.emoji) ? d.emoji : 'map-pin';
     return `
       <div class="form-group">
         <label>Spot Name</label>
@@ -840,14 +850,14 @@
       </div>
       <div class="form-group">
         <label>Icon</label>
-        <div class="emoji-picker-row" id="f-spot-emoji">
-          ${SPOT_EMOJIS.map((e) => `<button type="button" class="emoji-option ${e === selEmoji ? 'selected' : ''}" data-emoji="${e}">${e}</button>`).join('')}
+        <div class="icon-picker-row" id="f-spot-emoji">
+          ${SPOT_ICONS.map((icon) => `<button type="button" class="icon-option ${icon === sel ? 'selected' : ''}" data-emoji="${icon}"><i data-lucide="${icon}" class="picker-icon"></i></button>`).join('')}
         </div>
       </div>`;
   }
 
   function formFood(d) {
-    const selEmoji = d.emoji || '🍕';
+    const sel = FOOD_ICONS.includes(d.emoji) ? d.emoji : 'utensils-crossed';
     const rating = d.rating || 0;
     return `
       <div class="form-group">
@@ -861,13 +871,13 @@
       <div class="form-group">
         <label>Rating</label>
         <div class="rating-row" id="f-food-rating">
-          ${[1,2,3,4,5].map((n) => `<button type="button" class="rating-heart" data-val="${n}">${n <= rating ? '♥' : '♡'}</button>`).join('')}
+          ${[1,2,3,4,5].map((n) => `<button type="button" class="rating-heart-btn" data-val="${n}"><i data-lucide="heart" class="rating-heart-icon ${n <= rating ? 'filled' : 'muted'}"></i></button>`).join('')}
         </div>
       </div>
       <div class="form-group">
-        <label>Emoji</label>
-        <div class="emoji-picker-row" id="f-food-emoji">
-          ${FOOD_EMOJIS.map((e) => `<button type="button" class="emoji-option ${e === selEmoji ? 'selected' : ''}" data-emoji="${e}">${e}</button>`).join('')}
+        <label>Icon</label>
+        <div class="icon-picker-row" id="f-food-emoji">
+          ${FOOD_ICONS.map((icon) => `<button type="button" class="icon-option ${icon === sel ? 'selected' : ''}" data-emoji="${icon}"><i data-lucide="${icon}" class="picker-icon"></i></button>`).join('')}
         </div>
       </div>`;
   }
@@ -964,28 +974,32 @@
       });
     }
 
-    // Emoji pickers
+    // Icon pickers
     ['f-date-emoji', 'f-spot-emoji', 'f-food-emoji'].forEach((id) => {
       const row = document.getElementById(id);
       if (row) {
         row.addEventListener('click', (e) => {
-          const btn = e.target.closest('.emoji-option');
+          const btn = e.target.closest('.icon-option');
           if (!btn) return;
-          row.querySelectorAll('.emoji-option').forEach((b) => b.classList.remove('selected'));
+          row.querySelectorAll('.icon-option').forEach((b) => b.classList.remove('selected'));
           btn.classList.add('selected');
         });
       }
     });
 
-    // Rating hearts
+    // Rating hearts (icons)
     const ratingRow = document.getElementById('f-food-rating');
     if (ratingRow) {
       ratingRow.addEventListener('click', (e) => {
-        const btn = e.target.closest('.rating-heart');
+        const btn = e.target.closest('.rating-heart-btn');
         if (!btn) return;
         const val = parseInt(btn.dataset.val);
-        ratingRow.querySelectorAll('.rating-heart').forEach((b) => {
-          b.textContent = parseInt(b.dataset.val) <= val ? '♥' : '♡';
+        ratingRow.querySelectorAll('.rating-heart-btn').forEach((b) => {
+          const icon = b.querySelector('.rating-heart-icon');
+          if (icon) {
+            icon.classList.toggle('filled', parseInt(b.dataset.val) <= val);
+            icon.classList.toggle('muted', parseInt(b.dataset.val) > val);
+          }
         });
       });
     }
@@ -1075,37 +1089,40 @@
       case 'date': {
         const title = document.getElementById('f-date-title').value.trim();
         if (!title) { alert('Please add a title'); return null; }
-        const selEmoji = document.querySelector('#f-date-emoji .emoji-option.selected');
+        const selIcon = document.querySelector('#f-date-emoji .icon-option.selected');
         return {
           date: document.getElementById('f-date-date').value,
           title,
           description: document.getElementById('f-date-desc').value.trim(),
-          emoji: selEmoji ? selEmoji.dataset.emoji : '💕',
+          emoji: selIcon ? selIcon.dataset.emoji : 'heart',
         };
       }
       case 'spot': {
         const name = document.getElementById('f-spot-name').value.trim();
         if (!name) { alert('Please add a name'); return null; }
-        const selEmoji = document.querySelector('#f-spot-emoji .emoji-option.selected');
+        const selIcon = document.querySelector('#f-spot-emoji .icon-option.selected');
         return {
           name,
           address: document.getElementById('f-spot-address').value.trim(),
           notes: document.getElementById('f-spot-notes').value.trim(),
-          emoji: selEmoji ? selEmoji.dataset.emoji : '📍',
+          emoji: selIcon ? selIcon.dataset.emoji : 'map-pin',
         };
       }
       case 'food': {
         const name = document.getElementById('f-food-name').value.trim();
         if (!name) { alert('Please add a name'); return null; }
-        const selEmoji = document.querySelector('#f-food-emoji .emoji-option.selected');
-        const hearts = document.querySelectorAll('#f-food-rating .rating-heart');
+        const selIcon = document.querySelector('#f-food-emoji .icon-option.selected');
+        const hearts = document.querySelectorAll('#f-food-rating .rating-heart-btn');
         let rating = 0;
-        hearts.forEach((h) => { if (h.textContent === '♥') rating = parseInt(h.dataset.val); });
+        hearts.forEach((b) => {
+          const icon = b.querySelector('.rating-heart-icon');
+          if (icon && icon.classList.contains('filled')) rating = parseInt(b.dataset.val);
+        });
         return {
           name,
           notes: document.getElementById('f-food-notes').value.trim(),
           rating,
-          emoji: selEmoji ? selEmoji.dataset.emoji : '🍕',
+          emoji: selIcon ? selIcon.dataset.emoji : 'utensils-crossed',
         };
       }
       case 'letter': {
@@ -1268,6 +1285,7 @@
   document.getElementById('btn-collab').addEventListener('click', () => {
     collabPanel.classList.remove('hidden');
     hideCollabStatus();
+    refreshIcons();
   });
 
   collabCloseBtn.addEventListener('click', () => {
@@ -1315,7 +1333,33 @@
       collabRoomInput.value = roomFromUrl.trim().toUpperCase().slice(0, 12);
       collabPanel.classList.remove('hidden');
     }
+    refreshIcons();
   }
 
-  init();
+  if (typeof localStorage !== 'undefined' && localStorage.getItem(UNLOCK_KEY) === '1') {
+    init();
+  } else {
+    document.body.classList.add('locked');
+    var form = document.getElementById('password-form');
+    var input = document.getElementById('password-input');
+    var err = document.getElementById('password-error');
+    if (form && input) {
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        if (input.value.trim() === GATE_PASSWORD) {
+          localStorage.setItem(UNLOCK_KEY, '1');
+          document.body.classList.remove('locked');
+          if (err) { err.textContent = ''; err.classList.add('hidden'); }
+          init();
+        } else {
+          if (err) {
+            err.textContent = 'Incorrect';
+            err.classList.remove('hidden');
+          }
+          input.value = '';
+          input.focus();
+        }
+      });
+    }
+  }
 })();

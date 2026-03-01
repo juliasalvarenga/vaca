@@ -1,4 +1,5 @@
 const path = require('path');
+const fs = require('fs');
 const http = require('http');
 const express = require('express');
 const { Server } = require('socket.io');
@@ -14,6 +15,42 @@ const io = new Server(server, {
 });
 
 const roomState = new Map(); // roomId -> state
+const dataDir = path.join(__dirname, '..', 'data');
+const roomsFile = path.join(dataDir, 'rooms.json');
+
+function loadRooms() {
+  try {
+    if (!fs.existsSync(roomsFile)) return;
+    const raw = fs.readFileSync(roomsFile, 'utf8');
+    const data = JSON.parse(raw);
+    if (data && typeof data === 'object') {
+      for (const [room, state] of Object.entries(data)) {
+        if (state && (state.items || state.panX != null)) {
+          roomState.set(room, state);
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('Could not load room data:', e.message);
+  }
+}
+
+function saveRooms() {
+  try {
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
+    const data = {};
+    for (const [room, state] of roomState) {
+      data[room] = state;
+    }
+    fs.writeFileSync(roomsFile, JSON.stringify(data, null, 2), 'utf8');
+  } catch (e) {
+    console.warn('Could not save room data:', e.message);
+  }
+}
+
+loadRooms();
 
 io.on('connection', (socket) => {
   socket.on('join', (roomId) => {
@@ -39,11 +76,12 @@ io.on('connection', (socket) => {
       nextZ: state.nextZ || 1,
     };
     roomState.set(room, payload);
+    saveRooms();
     socket.to(room).emit('state', payload);
   });
 
   socket.on('disconnect', () => {
-    // Optionally clear room state when last person leaves (we keep it for now)
+    // Room state kept for persistence
   });
 });
 

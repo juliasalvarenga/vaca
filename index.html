@@ -6,63 +6,70 @@
   <title>Our World</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;500;600;700&family=Patrick+Hand&family=Shadows+Into+Light&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+  <div id="password-gate">
+    <div class="password-gate-inner">
+      <form id="password-form">
+        <input type="password" id="password-input" placeholder="Password" autocomplete="off" autofocus>
+        <button type="submit" class="btn btn-unlock">Unlock</button>
+      </form>
+      <p id="password-error" class="password-error hidden"></p>
+    </div>
+  </div>
+
   <div id="viewport">
+    <p id="canvas-quote" class="canvas-quote" aria-hidden="true">Build therefore your own world. As fast as you conform your life to the pure idea in your mind, that will unfold its great proportions.</p>
     <div id="canvas"></div>
   </div>
 
   <div id="toolbar">
     <button class="tool-btn" data-type="photo" title="Add Photo">
-      <span class="tool-icon">📸</span>
+      <i data-lucide="camera" class="tool-icon"></i>
       <span class="tool-label">Photo</span>
     </button>
     <button class="tool-btn" data-type="sticky" title="Add Sticky Note">
-      <span class="tool-icon">📝</span>
+      <i data-lucide="sticky-note" class="tool-icon"></i>
       <span class="tool-label">Note</span>
     </button>
     <button class="tool-btn" data-type="date" title="Add Date Log">
-      <span class="tool-icon">📅</span>
+      <i data-lucide="calendar-days" class="tool-icon"></i>
       <span class="tool-label">Date</span>
     </button>
     <button class="tool-btn" data-type="spot" title="Add Favorite Spot">
-      <span class="tool-icon">📍</span>
+      <i data-lucide="map-pin" class="tool-icon"></i>
       <span class="tool-label">Spot</span>
     </button>
     <button class="tool-btn" data-type="food" title="Add Favorite Food">
-      <span class="tool-icon">🍽️</span>
+      <i data-lucide="utensils-crossed" class="tool-icon"></i>
       <span class="tool-label">Food</span>
     </button>
     <button class="tool-btn" data-type="letter" title="Add Love Letter">
-      <span class="tool-icon">💌</span>
+      <i data-lucide="heart" class="tool-icon"></i>
       <span class="tool-label">Letter</span>
     </button>
     <button class="tool-btn" data-type="memory" title="Add Memory">
-      <span class="tool-icon">✨</span>
+      <i data-lucide="sparkles" class="tool-icon"></i>
       <span class="tool-label">Memory</span>
     </button>
     <button class="tool-btn" data-type="bucketlist" title="Bucket List">
-      <span class="tool-icon">☑️</span>
+      <i data-lucide="list-checks" class="tool-icon"></i>
       <span class="tool-label">Bucket</span>
     </button>
     <button class="tool-btn" data-type="quote" title="Quote / Inside Joke">
-      <span class="tool-icon">💬</span>
+      <i data-lucide="message-circle" class="tool-icon"></i>
       <span class="tool-label">Quote</span>
     </button>
     <div class="tool-separator"></div>
     <button class="tool-btn utility" id="btn-collab" title="Collaborate">
-      <span class="tool-icon">👥</span>
+      <i data-lucide="users" class="tool-icon"></i>
       <span class="tool-label">Together</span>
     </button>
     <div class="tool-separator"></div>
-    <button class="tool-btn utility" id="btn-reset" title="Reset View">
-      <span class="tool-icon">🏠</span>
-      <span class="tool-label">Reset</span>
-    </button>
     <button class="tool-btn utility" id="btn-fit" title="Fit All Items">
-      <span class="tool-icon">🔎</span>
+      <i data-lucide="scan-search" class="tool-icon"></i>
       <span class="tool-label">Fit All</span>
     </button>
   </div>
@@ -95,7 +102,7 @@
 
   <div id="collab-panel" class="hidden">
     <div class="collab-content">
-      <h3>👥 Edit together</h3>
+      <h3><i data-lucide="users" class="collab-title-icon"></i> Edit together</h3>
       <p class="collab-hint">Share the same room code to see changes in real time.</p>
       <div class="form-group">
         <label>Room code</label>
@@ -111,6 +118,7 @@
   </div>
 
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>
