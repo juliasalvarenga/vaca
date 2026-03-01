@@ -17,6 +17,7 @@
   // ── DOM refs ───────────────────────────────────────────
   const viewport = document.getElementById('viewport');
   const canvas = document.getElementById('canvas');
+  const canvasItems = document.getElementById('canvas-items');
   const toolbar = document.getElementById('toolbar');
   const zoomIndicator = document.getElementById('zoom-indicator');
   const modalOverlay = document.getElementById('modal-overlay');
@@ -164,7 +165,7 @@
 
   // ── Render Items ───────────────────────────────────────
   function renderAll() {
-    canvas.innerHTML = '';
+    canvasItems.innerHTML = '';
     state.items.forEach((item) => renderItem(item));
     applyTransform();
     refreshIcons();
@@ -230,7 +231,7 @@
         break;
     }
 
-    canvas.appendChild(el);
+    canvasItems.appendChild(el);
     refreshIcons();
 
     requestAnimationFrame(() => {

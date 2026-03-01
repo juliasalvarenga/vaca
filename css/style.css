@@ -160,14 +160,14 @@ body:not(.locked) #password-gate {
   cursor: grabbing;
 }
 
-/* ── Center quote (ingrained) ──────────────────────────── */
+/* ── Center quote (moves with canvas, not deletable) ────── */
 .canvas-quote {
   position: absolute;
-  left: 50%;
-  top: 50%;
+  left: 0;
+  top: 0;
   transform: translate(-50%, -50%);
-  width: 90%;
-  max-width: 420px;
+  width: 420px;
+  max-width: 90vw;
   margin: 0;
   padding: 0 24px;
   font-family: var(--font-hand);
@@ -189,6 +189,10 @@ body:not(.locked) #password-gate {
   left: 0;
   transform-origin: 0 0;
   will-change: transform;
+}
+
+#canvas-items {
+  position: relative;
   z-index: 1;
 }
 
