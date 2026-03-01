@@ -14,14 +14,23 @@ A shared scrapbook canvas for you and your person: photos, notes, dates, favorit
    - Example: if your username is `julia` and the repo is `vaca` → **https://julia.github.io/vaca/**
 
 Use that link from any device; your scrapbook is saved in the browser (localStorage) per device.  
-**Note:** The **Together** (real-time) feature does not work on GitHub Pages—it needs a server. Use it locally with `npm run server` (see below).
+**Note:** **Sync** and **Together** need a server; they don’t work on plain GitHub Pages. Run `npm run server` and open the app from that URL (see below).
 
 ---
 
 ## Run locally (solo)
 
 - Open `index.html` in a browser, or run any static server (e.g. `python3 -m http.server 8080`) and open the URL.
-- Everything is saved in your browser (localStorage).
+- Everything is saved in your browser (localStorage) only.
+
+## Same notes on every device (sync)
+
+1. From the project folder run: `npm run server`.
+2. Open **http://localhost:3001** (or your deployed server URL) in your browser.
+3. Enter the app password and use the app. Changes are saved to the server and the browser.
+4. On another browser or device, open the **same** server URL, enter the **same** password—you’ll see the same scrapbook. The server stores one copy per password so it stays in sync everywhere.
+
+You must open the app from the server (e.g. `http://localhost:3001`) for sync to work. Opening only `index.html` or using GitHub Pages keeps data local to that browser/device.
 
 ## Edit together (real-time)
 

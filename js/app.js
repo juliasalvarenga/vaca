@@ -4,6 +4,7 @@
   // ── State ──────────────────────────────────────────────
   const STORAGE_KEY = 'our-world-scrapbook';
   const UNLOCK_KEY = 'ourworld_unlocked';
+  const SYNC_ROOM_KEY = 'ourworld_sync_room';
   const GATE_PASSWORD = 'devotion';
 
   let state = {
@@ -51,9 +52,27 @@
 
   function getSocketUrl() {
     if (typeof window === 'undefined') return '';
+    if (typeof window.OUR_WORLD_SYNC_URL === 'string' && window.OUR_WORLD_SYNC_URL) return window.OUR_WORLD_SYNC_URL;
     const p = window.location.protocol;
     if (p === 'http:' || p === 'https:') return window.location.origin;
     return 'http://localhost:3001';
+  }
+
+  /** Derive a stable sync room id from password (same password = same data on all devices). */
+  function hashPassword(password) {
+    return new Promise(function (resolve, reject) {
+      if (typeof crypto === 'undefined' || !crypto.subtle) {
+        resolve('DEFAULT');
+        return;
+      }
+      const enc = new TextEncoder();
+      crypto.subtle.digest('SHA-256', enc.encode(password.trim()))
+        .then(function (buf) {
+          const hex = Array.from(new Uint8Array(buf)).map(function (b) { return b.toString(16).padStart(2, '0'); }).join('');
+          resolve(hex.slice(0, 12).toUpperCase());
+        })
+        .catch(function () { resolve('DEFAULT'); });
+    });
   }
 
   const TAPE_CLASSES = ['tape-pink', 'tape-blue', 'tape-green', 'tape-yellow', 'tape-purple'];
@@ -1242,6 +1261,38 @@
     if (collabStatus) collabStatus.classList.add('hidden');
   }
 
+  /** Connect to sync room so data is saved/loaded from server (same on all devices with same password). */
+  function connectSync(syncRoomId) {
+    const url = getSocketUrl();
+    if (!url || typeof io === 'undefined') return;
+    if (socket) {
+      socket.disconnect();
+      socket.removeAllListeners();
+      socket = null;
+    }
+    socket = io(url, { transports: ['websocket', 'polling'] });
+    currentRoomId = syncRoomId;
+    let receivedStateFromServer = false;
+
+    socket.on('connect', function () {
+      socket.emit('join', syncRoomId);
+      setTimeout(function () {
+        if (!receivedStateFromServer) socket.emit('state', getState());
+      }, 400);
+    });
+
+    socket.on('state', function (payload) {
+      receivedStateFromServer = true;
+      setState(payload);
+      renderAll();
+      applyTransform();
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+    });
+
+    socket.on('disconnect', function () {});
+    socket.on('connect_error', function () {});
+  }
+
   function connectToRoom(roomId, isCreator) {
     const url = getSocketUrl();
     if (typeof io === 'undefined') {
@@ -1250,12 +1301,13 @@
     }
     if (socket) {
       socket.disconnect();
+      socket.removeAllListeners();
       socket = null;
     }
     socket = io(url, { transports: ['websocket', 'polling'] });
     currentRoomId = roomId;
 
-    socket.on('connect', () => {
+    socket.on('connect', function () {
       socket.emit('join', roomId);
       if (isCreator) {
         socket.emit('state', getState());
@@ -1263,15 +1315,17 @@
       showCollabStatus('Connected! Share the room code: ' + roomId);
     });
 
-    socket.on('state', (payload) => {
+    socket.on('state', function (payload) {
       setState(payload);
+      renderAll();
+      applyTransform();
     });
 
-    socket.on('disconnect', () => {
+    socket.on('disconnect', function () {
       showCollabStatus('Disconnected.', true);
     });
 
-    socket.on('connect_error', () => {
+    socket.on('connect_error', function () {
       showCollabStatus('Could not connect. Is the server running? (npm run server)', true);
     });
   }
@@ -1328,6 +1382,9 @@
     renderAll();
     save();
 
+    var syncRoomId = typeof localStorage !== 'undefined' ? localStorage.getItem(SYNC_ROOM_KEY) : null;
+    if (syncRoomId && getSocketUrl()) connectSync(syncRoomId);
+
     const params = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
     const roomFromUrl = params.get('room');
     if (roomFromUrl && collabRoomInput) {
@@ -1348,10 +1405,13 @@
       form.addEventListener('submit', function (e) {
         e.preventDefault();
         if (input.value.trim() === GATE_PASSWORD) {
-          localStorage.setItem(UNLOCK_KEY, '1');
-          document.body.classList.remove('locked');
-          if (err) { err.textContent = ''; err.classList.add('hidden'); }
-          init();
+          hashPassword(input.value).then(function (syncRoomId) {
+            try { localStorage.setItem(SYNC_ROOM_KEY, syncRoomId); } catch (e) {}
+            localStorage.setItem(UNLOCK_KEY, '1');
+            document.body.classList.remove('locked');
+            if (err) { err.textContent = ''; err.classList.add('hidden'); }
+            init();
+          });
         } else {
           if (err) {
             err.textContent = 'Incorrect';
